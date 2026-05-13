@@ -81,7 +81,6 @@ ln -s /Applications "$DMG_STAGING/Applications"
 DMG_PATH="$ARTIFACTS_DIR/${APP_NAME}-${DMG_SUFFIX}.dmg"
 hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_PATH"
 
-ditto -c -k --keepParent "$APP_PATH" "$ARTIFACTS_DIR/${APP_NAME}-${DMG_SUFFIX}.zip"
 echo "Created artifacts:"
 echo " - $DMG_PATH"
 echo " - $SAMPLE_OUTPUT"

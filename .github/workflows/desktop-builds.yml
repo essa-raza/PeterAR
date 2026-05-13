@@ -84,15 +84,23 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: bash ./build_macos.sh
 
-      - name: Upload macOS artifacts
+      - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
         with:
-          name: CustomerNotesMerger-macos-${{ matrix.suffix }}
-          path: |
-            artifacts/Customer Notes Merger-${{ matrix.suffix }}.dmg
-            artifacts/Customer Notes Merger-${{ matrix.suffix }}.zip
-            artifacts/sample-output-${{ matrix.suffix }}.xlsx
-            artifacts/Customer Notes Merger-${{ matrix.suffix }}-open.png
+          name: CustomerNotesMerger-macos-${{ matrix.suffix }}-dmg
+          path: artifacts/Customer Notes Merger-${{ matrix.suffix }}.dmg
+
+      - name: Upload macOS screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: CustomerNotesMerger-macos-${{ matrix.suffix }}-screenshot
+          path: artifacts/Customer Notes Merger-${{ matrix.suffix }}-open.png
+
+      - name: Upload macOS sample output
+        uses: actions/upload-artifact@v4
+        with:
+          name: CustomerNotesMerger-macos-${{ matrix.suffix }}-sample-output
+          path: artifacts/sample-output-${{ matrix.suffix }}.xlsx
 
   compare-outputs:
     name: Compare Windows and macOS outputs
@@ -122,13 +130,13 @@ jobs:
       - name: Download macOS Intel artifacts
         uses: actions/download-artifact@v4
         with:
-          name: CustomerNotesMerger-macos-intel
+          name: CustomerNotesMerger-macos-intel-sample-output
           path: artifacts/macos-intel
 
       - name: Download macOS Apple Silicon artifacts
         uses: actions/download-artifact@v4
         with:
-          name: CustomerNotesMerger-macos-apple-silicon
+          name: CustomerNotesMerger-macos-apple-silicon-sample-output
           path: artifacts/macos-apple-silicon
 
       - name: Compare Windows and Intel outputs
