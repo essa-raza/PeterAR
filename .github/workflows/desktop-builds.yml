@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   windows-exe:
     name: Windows EXE
@@ -45,9 +48,19 @@ jobs:
             dist/CustomerNotesMerger.exe
             artifacts/windows-sample-output.xlsx
 
-  macos-universal-dmg:
-    name: macOS Universal DMG
-    runs-on: macos-14
+  macos-dmg:
+    name: macOS ${{ matrix.label }} DMG
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            label: Intel
+            suffix: intel
+          - runner: macos-14
+            label: Apple-Silicon
+            suffix: apple-silicon
 
     steps:
       - name: Check out repository
@@ -58,11 +71,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build universal mac app and DMG
+      - name: Build mac app and DMG
         env:
           PYTHON_BIN: python3
-          TARGET_ARCH: universal2
-          DMG_SUFFIX: universal
+          DMG_SUFFIX: ${{ matrix.suffix }}
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
@@ -75,19 +87,19 @@ jobs:
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CustomerNotesMerger-macos-universal
+          name: CustomerNotesMerger-macos-${{ matrix.suffix }}
           path: |
-            artifacts/Customer Notes Merger-universal.dmg
-            artifacts/Customer Notes Merger-universal.zip
-            artifacts/sample-output-universal.xlsx
-            artifacts/Customer Notes Merger-universal-open.png
+            artifacts/Customer Notes Merger-${{ matrix.suffix }}.dmg
+            artifacts/Customer Notes Merger-${{ matrix.suffix }}.zip
+            artifacts/sample-output-${{ matrix.suffix }}.xlsx
+            artifacts/Customer Notes Merger-${{ matrix.suffix }}-open.png
 
   compare-outputs:
     name: Compare Windows and macOS outputs
     runs-on: ubuntu-latest
     needs:
       - windows-exe
-      - macos-universal-dmg
+      - macos-dmg
 
     steps:
       - name: Check out repository
@@ -107,14 +119,26 @@ jobs:
           name: CustomerNotesMerger-windows
           path: artifacts/windows
 
-      - name: Download macOS artifacts
+      - name: Download macOS Intel artifacts
         uses: actions/download-artifact@v4
         with:
-          name: CustomerNotesMerger-macos-universal
-          path: artifacts/macos
+          name: CustomerNotesMerger-macos-intel
+          path: artifacts/macos-intel
 
-      - name: Compare workbook outputs
+      - name: Download macOS Apple Silicon artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: CustomerNotesMerger-macos-apple-silicon
+          path: artifacts/macos-apple-silicon
+
+      - name: Compare Windows and Intel outputs
         run: >
           python ./scripts/compare_workbooks.py
           "./artifacts/windows/windows-sample-output.xlsx"
-          "./artifacts/macos/sample-output-universal.xlsx"
+          "./artifacts/macos-intel/sample-output-intel.xlsx"
+
+      - name: Compare Windows and Apple Silicon outputs
+        run: >
+          python ./scripts/compare_workbooks.py
+          "./artifacts/windows/windows-sample-output.xlsx"
+          "./artifacts/macos-apple-silicon/sample-output-apple-silicon.xlsx"

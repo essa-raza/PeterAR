@@ -1,6 +1,9 @@
 $ErrorActionPreference = "Stop"
 
 $python = "C:\Users\essar\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+if (-not (Test-Path $python)) {
+    $python = "python"
+}
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $distPath = Join-Path $projectRoot "dist"
 $buildPath = Join-Path $projectRoot "build"

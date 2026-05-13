@@ -74,10 +74,13 @@ GitHub Actions build:
 - Workflow file: [.github/workflows/desktop-builds.yml](D:\Razex Solutions LLC (Codex)\PETER\Peter 4\.github\workflows\desktop-builds.yml)
 - Produces:
   - Windows `.exe`
-  - macOS universal `.dmg`
-  - macOS app screenshot artifact
+  - macOS Intel `.dmg`
+  - macOS Apple Silicon `.dmg`
+  - macOS app screenshot artifacts
   - sample output workbooks from both platforms
   - a CI comparison job that checks the Windows and macOS workbook outputs match
+
+For broad macOS compatibility, the workflow builds native DMGs for both Intel and Apple Silicon runners instead of forcing a single universal2 binary from dependency wheels that may not be fat binaries in CI.
 
 ### Signing And Notarization
 
