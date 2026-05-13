@@ -1,0 +1,120 @@
+name: Desktop builds
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    name: Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build Windows EXE
+        shell: powershell
+        run: .\build_windows.ps1
+
+      - name: Generate sample output with EXE
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path .\artifacts | Out-Null
+          .\dist\CustomerNotesMerger.exe `
+            --cli `
+            --csv ".\Docs\Bestand uit Yuki - Openstaande transacties - one2three.csv" `
+            --excel ".\Docs\Openstaande transacties  april (oud).xlsx" `
+            --output ".\artifacts\windows-sample-output.xlsx"
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CustomerNotesMerger-windows
+          path: |
+            dist/CustomerNotesMerger.exe
+            artifacts/windows-sample-output.xlsx
+
+  macos-universal-dmg:
+    name: macOS Universal DMG
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build universal mac app and DMG
+        env:
+          PYTHON_BIN: python3
+          TARGET_ARCH: universal2
+          DMG_SUFFIX: universal
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: bash ./build_macos.sh
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CustomerNotesMerger-macos-universal
+          path: |
+            artifacts/Customer Notes Merger-universal.dmg
+            artifacts/Customer Notes Merger-universal.zip
+            artifacts/sample-output-universal.xlsx
+            artifacts/Customer Notes Merger-universal-open.png
+
+  compare-outputs:
+    name: Compare Windows and macOS outputs
+    runs-on: ubuntu-latest
+    needs:
+      - windows-exe
+      - macos-universal-dmg
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install comparison dependency
+        run: python -m pip install openpyxl==3.1.5
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: CustomerNotesMerger-windows
+          path: artifacts/windows
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: CustomerNotesMerger-macos-universal
+          path: artifacts/macos
+
+      - name: Compare workbook outputs
+        run: >
+          python ./scripts/compare_workbooks.py
+          "./artifacts/windows/windows-sample-output.xlsx"
+          "./artifacts/macos/sample-output-universal.xlsx"

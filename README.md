@@ -5,6 +5,7 @@ This project includes:
 - a reusable merge engine
 - a command-line script
 - a modern desktop GUI for Windows packaging now and macOS packaging next
+- hidden CLI support in the packaged apps for CI validation
 
 The app takes:
 
@@ -70,10 +71,13 @@ chmod +x ./build_macos.sh
 
 GitHub Actions build:
 
-- Workflow file: [.github/workflows/macos-build.yml](D:\Razex Solutions LLC (Codex)\PETER\Peter 4\.github\workflows\macos-build.yml)
-- Produces two artifacts:
-  - `CustomerNotesMerger-macos-intel`
-  - `CustomerNotesMerger-macos-apple-silicon`
+- Workflow file: [.github/workflows/desktop-builds.yml](D:\Razex Solutions LLC (Codex)\PETER\Peter 4\.github\workflows\desktop-builds.yml)
+- Produces:
+  - Windows `.exe`
+  - macOS universal `.dmg`
+  - macOS app screenshot artifact
+  - sample output workbooks from both platforms
+  - a CI comparison job that checks the Windows and macOS workbook outputs match
 
 ### Signing And Notarization
 
@@ -88,3 +92,11 @@ Unsigned macOS apps may trigger Gatekeeper warnings. The workflow is prepared to
 - `APPLE_APP_SPECIFIC_PASSWORD`
 
 If those secrets are not present, the workflow still builds the app, but the artifact will be unsigned and may appear suspicious to macOS users.
+
+## Hidden CLI Mode
+
+The packaged Windows and macOS apps support a hidden CLI mode for automated testing:
+
+```powershell
+.\dist\CustomerNotesMerger.exe --cli --csv "<csv>" --excel "<xlsx>" --output "<output.xlsx>"
+```

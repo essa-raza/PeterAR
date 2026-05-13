@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment
 
 
 LEGAL_TOKENS = {
@@ -158,6 +159,13 @@ def default_output_path(csv_path: Path) -> Path:
     return csv_path.with_name(f"{csv_path.stem} - merged.xlsx")
 
 
+def format_output_sheet(sheet) -> None:
+    # Column I contains the merged comments field in the exported workbook.
+    sheet.column_dimensions["I"].width = 42
+    for cell in sheet["I"]:
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+
 def write_output(
     output_path: Path,
     header: list[str],
@@ -197,6 +205,7 @@ def write_output(
         extras = list(match.merged()) if match else ["", "", ""]
         sheet.append(padded + extras)
 
+    format_output_sheet(sheet)
     workbook.save(output_path)
     return matched, unmatched, total_customer_sections
 

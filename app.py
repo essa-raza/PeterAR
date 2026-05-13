@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import threading
 from pathlib import Path
+from typing import Sequence
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -330,10 +332,38 @@ class App(ctk.CTk):
         messagebox.showerror(APP_TITLE, message)
 
 
-def main() -> None:
+def run_cli(csv_path: str, excel_path: str, output_path: str | None) -> int:
+    result = merge_customer_notes(
+        csv_path,
+        excel_path,
+        output_path or str(default_output_path(Path(csv_path))),
+    )
+    print(f"Created: {result.output_path}")
+    print(f"Matched customer sections: {result.matched_count}")
+    print(f"Unmatched customer sections: {len(result.unmatched_customers)}")
+    return 0
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--cli", action="store_true")
+    parser.add_argument("--csv")
+    parser.add_argument("--excel")
+    parser.add_argument("--output")
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.cli:
+        if not args.csv or not args.excel:
+            raise SystemExit("CLI mode requires --csv and --excel.")
+        return run_cli(args.csv, args.excel, args.output)
+
     app = App()
     app.mainloop()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

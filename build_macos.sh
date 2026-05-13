@@ -6,6 +6,11 @@ VENV_PATH="$PROJECT_ROOT/.venv-macos"
 ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
 APP_NAME="Customer Notes Merger"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+TARGET_ARCH="${TARGET_ARCH:-}"
+DMG_SUFFIX="${DMG_SUFFIX:-macos}"
+SAMPLE_CSV="$PROJECT_ROOT/Docs/Bestand uit Yuki - Openstaande transacties - one2three.csv"
+SAMPLE_XLSX="$PROJECT_ROOT/Docs/Openstaande transacties  april (oud).xlsx"
+SAMPLE_OUTPUT="$ARTIFACTS_DIR/sample-output-${DMG_SUFFIX}.xlsx"
 
 "$PYTHON_BIN" -m venv "$VENV_PATH"
 source "$VENV_PATH/bin/activate"
@@ -17,15 +22,22 @@ python "$PROJECT_ROOT/scripts/make_icon.py"
 rm -rf "$PROJECT_ROOT/build" "$PROJECT_ROOT/dist" "$ARTIFACTS_DIR"
 mkdir -p "$ARTIFACTS_DIR"
 
-pyinstaller \
-  --noconfirm \
-  --clean \
-  --windowed \
-  --name "$APP_NAME" \
-  --icon "$PROJECT_ROOT/assets/customer_notes_merger.icns" \
-  "$PROJECT_ROOT/app.py"
+PYINSTALLER_ARGS=(
+  --noconfirm
+  --clean
+  --windowed
+  --name "$APP_NAME"
+  --icon "$PROJECT_ROOT/assets/customer_notes_merger.icns"
+)
+
+if [[ -n "$TARGET_ARCH" ]]; then
+  PYINSTALLER_ARGS+=(--target-arch "$TARGET_ARCH")
+fi
+
+pyinstaller "${PYINSTALLER_ARGS[@]}" "$PROJECT_ROOT/app.py"
 
 APP_PATH="$PROJECT_ROOT/dist/$APP_NAME.app"
+APP_EXECUTABLE="$APP_PATH/Contents/MacOS/$APP_NAME"
 
 if [[ -n "${APPLE_CERTIFICATE_P12_BASE64:-}" ]] && [[ -n "${APPLE_CERTIFICATE_PASSWORD:-}" ]] && [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]] && [[ -n "${APPLE_KEYCHAIN_PASSWORD:-}" ]]; then
   CERT_PATH="$RUNNER_TEMP/certificate.p12"
@@ -53,5 +65,23 @@ if [[ -n "${APPLE_CERTIFICATE_P12_BASE64:-}" ]] && [[ -n "${APPLE_CERTIFICATE_PA
   fi
 fi
 
-ditto -c -k --keepParent "$APP_PATH" "$ARTIFACTS_DIR/${APP_NAME}.zip"
-echo "Created artifact: $ARTIFACTS_DIR/${APP_NAME}.zip"
+"$APP_EXECUTABLE" --cli --csv "$SAMPLE_CSV" --excel "$SAMPLE_XLSX" --output "$SAMPLE_OUTPUT"
+
+open "$APP_PATH"
+sleep 8
+screencapture -x "$ARTIFACTS_DIR/${APP_NAME}-${DMG_SUFFIX}-open.png"
+pkill -f "$APP_NAME" || true
+
+DMG_STAGING="$PROJECT_ROOT/dmg-staging"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
+cp -R "$APP_PATH" "$DMG_STAGING/"
+ln -s /Applications "$DMG_STAGING/Applications"
+
+DMG_PATH="$ARTIFACTS_DIR/${APP_NAME}-${DMG_SUFFIX}.dmg"
+hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_PATH"
+
+ditto -c -k --keepParent "$APP_PATH" "$ARTIFACTS_DIR/${APP_NAME}-${DMG_SUFFIX}.zip"
+echo "Created artifacts:"
+echo " - $DMG_PATH"
+echo " - $SAMPLE_OUTPUT"
