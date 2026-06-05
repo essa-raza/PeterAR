@@ -58,8 +58,8 @@ class App(ctk.CTk):
         ctk.CTkLabel(
             hero,
             text=(
-                "Attach Commentaar, Mail, and Whatsapp details from the Excel file, "
-                "combine repeated notes, and export the result as a polished Excel workbook."
+                "Transfer Commentaar, Mail, and Whatsapp details from the previous workbook, "
+                "keep Match status in column H, and export the result as a polished Excel workbook."
             ),
             justify="left",
             wraplength=760,
@@ -153,9 +153,9 @@ class App(ctk.CTk):
         ).grid(row=0, column=0, padx=24, pady=(26, 12), sticky="w")
 
         bullets = [
-            "Matches customer section rows between the CSV and Excel workbook.",
-            "Collects Commentaar, Mail, and Whatsapp values from columns H to J.",
-            "Combines repeated notes into one clean field per customer.",
+            "Matches rows between the new CSV and the previous workbook using columns A to H.",
+            "Collects Commentaar, Mail, and Whatsapp values from columns I to K.",
+            "Preserves row highlighting by coloring the full output row when a matched row was colored.",
             "Exports a ready-to-share Excel file without changing the source files.",
         ]
         for index, bullet in enumerate(bullets, start=1):
@@ -313,15 +313,15 @@ class App(ctk.CTk):
             f"Merged workbook created successfully at:\n{result.output_path}"
         )
         self.summary_var.set(
-            f"Matched {result.matched_count} of {result.total_customer_sections} customer sections.\n"
-            f"Unmatched customers: {unmatched_count}"
+            f"Matched {result.matched_count} of {result.total_customer_sections} rows.\n"
+            f"Unmatched rows: {unmatched_count}"
         )
         messagebox.showinfo(
             APP_TITLE,
             (
                 f"Done.\n\nOutput: {result.output_path}\n"
-                f"Matched customers: {result.matched_count}\n"
-                f"Unmatched customers: {unmatched_count}"
+                f"Matched rows: {result.matched_count}\n"
+                f"Unmatched rows: {unmatched_count}"
             ),
         )
 
@@ -339,8 +339,8 @@ def run_cli(csv_path: str, excel_path: str, output_path: str | None) -> int:
         output_path or str(default_output_path(Path(csv_path))),
     )
     print(f"Created: {result.output_path}")
-    print(f"Matched customer sections: {result.matched_count}")
-    print(f"Unmatched customer sections: {len(result.unmatched_customers)}")
+    print(f"Matched rows: {result.matched_count}")
+    print(f"Unmatched rows: {len(result.unmatched_customers)}")
     return 0
 
 

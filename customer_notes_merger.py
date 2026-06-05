@@ -1,49 +1,35 @@
 from __future__ import annotations
 
 import csv
-import re
-from dataclasses import dataclass, field
-from datetime import datetime
+from collections import defaultdict, deque
+from copy import copy
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Deque
 
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Font
 
 
-LEGAL_TOKENS = {
-    "BV",
-    "BVBA",
-    "SRL",
-    "SPRL",
-    "NV",
-    "CV",
-    "CVBA",
-    "COMMV",
-    "VOF",
-}
+CSV_HEADERS = [
+    "Type",
+    "Omschrijving",
+    "Datum",
+    "Factuurnummer",
+    "Vervaldatum",
+    "Openstaand",
+    "Bedrag",
+    "Match status",
+]
+OUTPUT_HEADERS = CSV_HEADERS + ["Commentaar", "Mail", "Whatsapp"]
+NOTE_COLUMNS = (9, 10, 11)
 
 
 @dataclass
-class CustomerInfo:
-    comments: list[str] = field(default_factory=list)
-    mails: list[str] = field(default_factory=list)
-    whatsapps: list[str] = field(default_factory=list)
-
-    def add(self, comment: object, mail: object, whatsapp: object) -> None:
-        if comment not in (None, ""):
-            self.comments.append(clean_text(comment))
-        if mail not in (None, ""):
-            self.mails.append(clean_text(mail))
-        if whatsapp not in (None, ""):
-            self.whatsapps.append(clean_text(whatsapp))
-
-    def merged(self) -> tuple[str, str, str]:
-        return (
-            join_unique(self.comments),
-            join_unique(self.mails),
-            join_unique(self.whatsapps),
-        )
+class LegacyRow:
+    signature: tuple[str, ...]
+    notes: tuple[object, object, object]
+    row_fill: object | None
 
 
 @dataclass
@@ -55,104 +41,64 @@ class MergeResult:
 
 
 def clean_text(value: object) -> str:
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d")
-
-    text = str(value).replace("\r\n", "\n").replace("\r", "\n")
-    lines = [line.strip() for line in text.split("\n")]
-    return "\n".join(line for line in lines if line)
+    if value is None:
+        return ""
+    return str(value).replace("\r\n", "\n").replace("\r", "\n").strip()
 
 
-def join_unique(values: Iterable[str]) -> str:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for value in values:
-        cleaned = clean_text(value)
-        if cleaned and cleaned not in seen:
-            seen.add(cleaned)
-            ordered.append(cleaned)
-    return "\n".join(ordered)
-
-
-def normalize_name(name: str) -> str:
-    text = clean_text(name).upper()
-    text = re.sub(r"\([^)]*\)", " ", text)
-    text = text.replace("&", " AND ")
-    text = re.sub(r"[^A-Z0-9]+", " ", text)
-    tokens = [token for token in text.split() if token and token not in LEGAL_TOKENS]
-    return " ".join(tokens)
-
-
-def alias_candidates(name: str) -> list[str]:
-    base = normalize_name(name)
-    aliases = [base]
-
-    stripped_prefix = re.sub(
-        r"^(?:BV|BVBA|SRL|SPRL|NV|CV|CVBA|COMMV|VOF)\s+",
-        "",
-        clean_text(name),
-        flags=re.IGNORECASE,
-    )
-    stripped_normalized = normalize_name(stripped_prefix)
-    if stripped_normalized and stripped_normalized not in aliases:
-        aliases.append(stripped_normalized)
-
-    compact = base.replace(" ", "")
-    if compact and compact not in aliases:
-        aliases.append(compact)
-
-    return aliases
+def row_signature(values: list[object]) -> tuple[str, ...]:
+    padded = list(values[:8])
+    if len(padded) < 8:
+        padded.extend([""] * (8 - len(padded)))
+    return tuple(clean_text(value) for value in padded)
 
 
 def parse_csv_sections(csv_path: Path) -> tuple[list[str], list[list[str]]]:
     with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.reader(handle, delimiter=";")
+        sample = handle.read(4096)
+        handle.seek(0)
+        delimiter = ";" if sample.count(";") >= sample.count(",") else ","
+        reader = csv.reader(handle, delimiter=delimiter)
         rows = list(reader)
 
     if not rows:
         raise ValueError("CSV file is empty.")
 
-    header = list(rows[0])
-    data_rows = [list(row) for row in rows[1:]]
+    header = list(rows[0][:8])
+    if header != CSV_HEADERS:
+        raise ValueError(
+            f"Unexpected CSV headers. Expected {CSV_HEADERS} but received {header}."
+        )
+
+    data_rows: list[list[str]] = []
+    for row in rows[1:]:
+        trimmed = list(row[:8])
+        if len(trimmed) < 8:
+            trimmed.extend([""] * (8 - len(trimmed)))
+        data_rows.append(trimmed)
+
     return header, data_rows
 
 
-def is_excel_customer_header(row_values: list[object]) -> bool:
-    first = row_values[0]
-    if first in (None, ""):
-        return False
-    return all(value in (None, "") for value in row_values[1:7])
-
-
-def build_customer_map(xlsx_path: Path) -> dict[str, CustomerInfo]:
-    workbook = load_workbook(xlsx_path, data_only=True)
+def build_legacy_row_map(xlsx_path: Path) -> dict[tuple[str, ...], Deque[LegacyRow]]:
+    workbook = load_workbook(xlsx_path)
     sheet = workbook.active
 
-    customer_map: dict[str, CustomerInfo] = {}
-    current_names: list[str] = []
-
+    row_map: dict[tuple[str, ...], Deque[LegacyRow]] = defaultdict(deque)
     for row_idx in range(2, sheet.max_row + 1):
-        row = [sheet.cell(row_idx, col_idx).value for col_idx in range(1, 11)]
+        signature = row_signature([sheet.cell(row_idx, col_idx).value for col_idx in range(1, 9)])
+        notes = tuple(sheet.cell(row_idx, col_idx).value for col_idx in NOTE_COLUMNS)
 
-        if is_excel_customer_header(row):
-            header_name = clean_text(row[0])
-            current_names = alias_candidates(header_name)
-            info = customer_map.setdefault(current_names[0], CustomerInfo())
-            info.add(row[7], row[8], row[9])
-            for alias in current_names[1:]:
-                customer_map[alias] = info
-            continue
+        row_fill = None
+        for col_idx in range(1, min(sheet.max_column, 11) + 1):
+            fill = sheet.cell(row_idx, col_idx).fill
+            if fill and fill.fill_type:
+                row_fill = copy(fill)
+                break
 
-        if not current_names:
-            continue
+        row_map[signature].append(LegacyRow(signature=signature, notes=notes, row_fill=row_fill))
 
-        comment, mail, whatsapp = row[7], row[8], row[9]
-        if comment in (None, "") and mail in (None, "") and whatsapp in (None, ""):
-            continue
-
-        customer_map[current_names[0]].add(comment, mail, whatsapp)
-
-    return customer_map
+    return row_map
 
 
 def default_output_path(csv_path: Path) -> Path:
@@ -160,54 +106,73 @@ def default_output_path(csv_path: Path) -> Path:
 
 
 def format_output_sheet(sheet) -> None:
-    # Column I contains the merged comments field in the exported workbook.
-    sheet.column_dimensions["I"].width = 42
-    for cell in sheet["I"]:
-        cell.alignment = Alignment(wrap_text=True, vertical="top")
+    widths = {
+        "A": 22,
+        "B": 90,
+        "C": 14,
+        "D": 18,
+        "E": 14,
+        "F": 14,
+        "G": 14,
+        "H": 14,
+        "I": 45,
+        "J": 18,
+        "K": 18,
+    }
+    wrap_alignment = Alignment(wrap_text=True, vertical="top")
+
+    for column, width in widths.items():
+        sheet.column_dimensions[column].width = width
+
+    for row in sheet.iter_rows():
+        for cell in row:
+            cell.alignment = wrap_alignment
+
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = f"A1:K{sheet.max_row}"
 
 
 def write_output(
     output_path: Path,
     header: list[str],
     data_rows: list[list[str]],
-    customer_map: dict[str, CustomerInfo],
+    legacy_rows: dict[tuple[str, ...], Deque[LegacyRow]],
 ) -> tuple[int, list[str], int]:
-    final_header = list(header) + ["Commentaar", "Mail", "Whatsapp"]
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Merged"
-    sheet.append(final_header)
+    sheet.append(OUTPUT_HEADERS)
 
     matched = 0
     unmatched: list[str] = []
-    total_customer_sections = 0
 
-    for row in data_rows:
-        padded = list(row) + [""] * max(0, len(header) - len(row))
-        customer_name = padded[0].strip() if padded else ""
-        match = None
+    for row_idx, row in enumerate(data_rows, start=2):
+        padded = list(row)[: len(header)]
+        if len(padded) < len(header):
+            padded.extend([""] * (len(header) - len(padded)))
 
-        is_customer_header = (
-            customer_name and all(not value.strip() for value in padded[1:len(header)])
-        )
-        if is_customer_header:
-            total_customer_sections += 1
-            normalized = normalize_name(customer_name)
-            match = customer_map.get(normalized)
-            if match is None:
-                match = customer_map.get(normalized.replace(" ", ""))
+        legacy_row = None
+        signature = row_signature(padded)
+        matches = legacy_rows.get(signature)
+        if matches:
+            legacy_row = matches.popleft()
+            matched += 1
+        else:
+            unmatched.append(" | ".join(signature))
 
-            if match is not None:
-                matched += 1
-            else:
-                unmatched.append(customer_name)
+        notes = list(legacy_row.notes) if legacy_row else ["", "", ""]
+        sheet.append(padded + notes)
 
-        extras = list(match.merged()) if match else ["", "", ""]
-        sheet.append(padded + extras)
+        if legacy_row and legacy_row.row_fill:
+            for col_idx in range(1, 12):
+                sheet.cell(row_idx, col_idx).fill = copy(legacy_row.row_fill)
 
     format_output_sheet(sheet)
     workbook.save(output_path)
-    return matched, unmatched, total_customer_sections
+    return matched, unmatched, len(data_rows)
 
 
 def merge_customer_notes(
@@ -220,8 +185,8 @@ def merge_customer_notes(
     output_file = Path(output_path) if output_path else default_output_path(csv_file)
 
     header, data_rows = parse_csv_sections(csv_file)
-    customer_map = build_customer_map(excel_file)
-    matched, unmatched, total = write_output(output_file, header, data_rows, customer_map)
+    legacy_rows = build_legacy_row_map(excel_file)
+    matched, unmatched, total = write_output(output_file, header, data_rows, legacy_rows)
 
     return MergeResult(
         output_path=output_file,
