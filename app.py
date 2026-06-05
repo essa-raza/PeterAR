@@ -59,7 +59,7 @@ class App(ctk.CTk):
             hero,
             text=(
                 "Transfer Commentaar, Mail, and Whatsapp details from the previous workbook, "
-                "keep Match status in column H, and export the result as a polished Excel workbook."
+                "remove Match status from the output, and export the result as a polished Excel workbook."
             ),
             justify="left",
             wraplength=760,
@@ -154,7 +154,7 @@ class App(ctk.CTk):
 
         bullets = [
             "Matches rows between the new CSV and the previous workbook using columns A to H.",
-            "Collects Commentaar, Mail, and Whatsapp values from columns I to K.",
+            "Removes Match status from the output so Commentaar, Mail, and Whatsapp become columns H to J.",
             "Preserves row highlighting by coloring the full output row when a matched row was colored.",
             "Exports a ready-to-share Excel file without changing the source files.",
         ]

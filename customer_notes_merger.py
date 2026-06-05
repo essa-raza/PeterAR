@@ -21,8 +21,9 @@ CSV_HEADERS = [
     "Bedrag",
     "Match status",
 ]
-OUTPUT_HEADERS = CSV_HEADERS + ["Commentaar", "Mail", "Whatsapp"]
-NOTE_COLUMNS = (9, 10, 11)
+OUTPUT_HEADERS = CSV_HEADERS[:7] + ["Commentaar", "Mail", "Whatsapp"]
+LEGACY_NOTE_COLUMNS_WITH_STATUS = (9, 10, 11)
+LEGACY_NOTE_COLUMNS_NO_STATUS = (8, 9, 10)
 
 
 @dataclass
@@ -83,11 +84,19 @@ def parse_csv_sections(csv_path: Path) -> tuple[list[str], list[list[str]]]:
 def build_legacy_row_map(xlsx_path: Path) -> dict[tuple[str, ...], Deque[LegacyRow]]:
     workbook = load_workbook(xlsx_path)
     sheet = workbook.active
+    header_values = [sheet.cell(1, col_idx).value for col_idx in range(1, sheet.max_column + 1)]
+    normalized_headers = [clean_text(value).lower() for value in header_values]
+    if normalized_headers[:11] == [value.lower() for value in CSV_HEADERS + ["Commentaar", "Mail", "Whatsapp"]]:
+        note_columns = LEGACY_NOTE_COLUMNS_WITH_STATUS
+    elif normalized_headers[:10] == [value.lower() for value in OUTPUT_HEADERS]:
+        note_columns = LEGACY_NOTE_COLUMNS_NO_STATUS
+    else:
+        note_columns = LEGACY_NOTE_COLUMNS_WITH_STATUS
 
     row_map: dict[tuple[str, ...], Deque[LegacyRow]] = defaultdict(deque)
     for row_idx in range(2, sheet.max_row + 1):
         signature = row_signature([sheet.cell(row_idx, col_idx).value for col_idx in range(1, 9)])
-        notes = tuple(sheet.cell(row_idx, col_idx).value for col_idx in NOTE_COLUMNS)
+        notes = tuple(sheet.cell(row_idx, col_idx).value for col_idx in note_columns)
 
         row_fill = None
         for col_idx in range(1, min(sheet.max_column, 11) + 1):
@@ -114,10 +123,9 @@ def format_output_sheet(sheet) -> None:
         "E": 14,
         "F": 14,
         "G": 14,
-        "H": 14,
-        "I": 45,
+        "H": 45,
+        "I": 18,
         "J": 18,
-        "K": 18,
     }
     wrap_alignment = Alignment(wrap_text=True, vertical="top")
 
@@ -132,7 +140,7 @@ def format_output_sheet(sheet) -> None:
         cell.font = Font(bold=True)
 
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = f"A1:K{sheet.max_row}"
+    sheet.auto_filter.ref = f"A1:J{sheet.max_row}"
 
 
 def write_output(
@@ -164,10 +172,11 @@ def write_output(
             unmatched.append(" | ".join(signature))
 
         notes = list(legacy_row.notes) if legacy_row else ["", "", ""]
-        sheet.append(padded + notes)
+        output_row = padded[:7] + notes
+        sheet.append(output_row)
 
         if legacy_row and legacy_row.row_fill:
-            for col_idx in range(1, 12):
+            for col_idx in range(1, 11):
                 sheet.cell(row_idx, col_idx).fill = copy(legacy_row.row_fill)
 
     format_output_sheet(sheet)

@@ -10,7 +10,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Transfer Commentaar/Mail/Whatsapp fields and row colors from a previous "
-            "merged workbook onto matching rows in a semicolon-separated CSV, then save as XLSX."
+            "merged workbook onto matching rows in a semicolon-separated CSV, remove Match status, then save as XLSX."
         )
     )
     parser.add_argument("csv_file", type=Path, help="Input semicolon-separated CSV file.")
