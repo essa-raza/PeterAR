@@ -10,9 +10,9 @@ This project includes:
 The app takes:
 
 - a semicolon-separated CSV file with customer section header rows
-- an Excel file with customer follow-up data in columns `H:J`
+- a previous merged Excel file with customer follow-up data in columns `I:K`
 
-It appends these three fields to the matching customer header rows in the CSV:
+It appends these three fields to matching CSV rows while keeping `Match status` in column `H`:
 
 - `Commentaar`
 - `Mail`
@@ -22,9 +22,9 @@ The final output is saved as an Excel file (`.xlsx`).
 
 ## What it handles
 
-- Matches by customer name on the section header row.
-- Normalizes names to reduce small formatting differences.
-- Combines multiple comment, mail, and WhatsApp values for the same customer into one cell per field.
+- Matches rows using the first eight columns (`A:H`) from the CSV and previous workbook.
+- Copies `Commentaar`, `Mail`, and `Whatsapp` from workbook columns `I:K`.
+- Preserves row highlighting by applying the matched row color to the full output row.
 - Preserves all rows from the CSV in the output workbook.
 
 ## Files
