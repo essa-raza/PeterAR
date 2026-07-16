@@ -153,7 +153,7 @@ class App(ctk.CTk):
         ).grid(row=0, column=0, padx=24, pady=(26, 12), sticky="w")
 
         bullets = [
-            "Matches rows between the new CSV and the previous workbook using columns A to H.",
+            "Matches rows between the new CSV and the previous workbook, using A:H for older files and A:G for newer no-status merged files.",
             "Removes Match status from the output so Commentaar, Mail, and Whatsapp become columns H to J.",
             "Preserves row highlighting by coloring the full output row when a matched row was colored.",
             "Exports a ready-to-share Excel file without changing the source files.",
