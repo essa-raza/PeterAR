@@ -23,6 +23,7 @@ The final output is saved as an Excel file (`.xlsx`).
 ## What it handles
 
 - Matches rows using the first eight columns (`A:H`) from the CSV and previous workbook.
+- Automatically falls back to matching on columns `A:G` when the previous merged workbook is already in the newer format without `Match status`.
 - Removes `Match status` from the exported workbook so `Commentaar`, `Mail`, and `Whatsapp` end up in columns `H:J`.
 - Preserves row highlighting by applying the matched row color to the full output row.
 - Preserves all rows from the CSV in the output workbook.

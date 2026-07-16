@@ -47,10 +47,10 @@ def clean_text(value: object) -> str:
     return str(value).replace("\r\n", "\n").replace("\r", "\n").strip()
 
 
-def row_signature(values: list[object]) -> tuple[str, ...]:
-    padded = list(values[:8])
-    if len(padded) < 8:
-        padded.extend([""] * (8 - len(padded)))
+def row_signature(values: list[object], width: int = 8) -> tuple[str, ...]:
+    padded = list(values[:width])
+    if len(padded) < width:
+        padded.extend([""] * (width - len(padded)))
     return tuple(clean_text(value) for value in padded)
 
 
@@ -81,21 +81,29 @@ def parse_csv_sections(csv_path: Path) -> tuple[list[str], list[list[str]]]:
     return header, data_rows
 
 
-def build_legacy_row_map(xlsx_path: Path) -> dict[tuple[str, ...], Deque[LegacyRow]]:
+def build_legacy_row_map(
+    xlsx_path: Path,
+) -> tuple[dict[tuple[str, ...], Deque[LegacyRow]], int]:
     workbook = load_workbook(xlsx_path)
     sheet = workbook.active
     header_values = [sheet.cell(1, col_idx).value for col_idx in range(1, sheet.max_column + 1)]
     normalized_headers = [clean_text(value).lower() for value in header_values]
     if normalized_headers[:11] == [value.lower() for value in CSV_HEADERS + ["Commentaar", "Mail", "Whatsapp"]]:
         note_columns = LEGACY_NOTE_COLUMNS_WITH_STATUS
+        match_width = 8
     elif normalized_headers[:10] == [value.lower() for value in OUTPUT_HEADERS]:
         note_columns = LEGACY_NOTE_COLUMNS_NO_STATUS
+        match_width = 7
     else:
         note_columns = LEGACY_NOTE_COLUMNS_WITH_STATUS
+        match_width = 8
 
     row_map: dict[tuple[str, ...], Deque[LegacyRow]] = defaultdict(deque)
     for row_idx in range(2, sheet.max_row + 1):
-        signature = row_signature([sheet.cell(row_idx, col_idx).value for col_idx in range(1, 9)])
+        signature = row_signature(
+            [sheet.cell(row_idx, col_idx).value for col_idx in range(1, match_width + 1)],
+            width=match_width,
+        )
         notes = tuple(sheet.cell(row_idx, col_idx).value for col_idx in note_columns)
 
         row_fill = None
@@ -107,7 +115,7 @@ def build_legacy_row_map(xlsx_path: Path) -> dict[tuple[str, ...], Deque[LegacyR
 
         row_map[signature].append(LegacyRow(signature=signature, notes=notes, row_fill=row_fill))
 
-    return row_map
+    return row_map, match_width
 
 
 def default_output_path(csv_path: Path) -> Path:
@@ -148,6 +156,7 @@ def write_output(
     header: list[str],
     data_rows: list[list[str]],
     legacy_rows: dict[tuple[str, ...], Deque[LegacyRow]],
+    match_width: int,
 ) -> tuple[int, list[str], int]:
     workbook = Workbook()
     sheet = workbook.active
@@ -163,7 +172,7 @@ def write_output(
             padded.extend([""] * (len(header) - len(padded)))
 
         legacy_row = None
-        signature = row_signature(padded)
+        signature = row_signature(padded, width=match_width)
         matches = legacy_rows.get(signature)
         if matches:
             legacy_row = matches.popleft()
@@ -194,8 +203,10 @@ def merge_customer_notes(
     output_file = Path(output_path) if output_path else default_output_path(csv_file)
 
     header, data_rows = parse_csv_sections(csv_file)
-    legacy_rows = build_legacy_row_map(excel_file)
-    matched, unmatched, total = write_output(output_file, header, data_rows, legacy_rows)
+    legacy_rows, match_width = build_legacy_row_map(excel_file)
+    matched, unmatched, total = write_output(
+        output_file, header, data_rows, legacy_rows, match_width
+    )
 
     return MergeResult(
         output_path=output_file,
