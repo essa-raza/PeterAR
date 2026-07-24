@@ -36,7 +36,8 @@ class App(ctk.CTk):
         self.debug_mode_var = ctk.BooleanVar(value=False)
         self.save_log_var = ctk.BooleanVar(value=False)
         self.debug_log_var = ctk.StringVar(value="Debug mode is off.")
-        self._log_queue: Queue[str] = Queue()
+        self._status_queue: Queue[str] = Queue()
+        self._debug_queue: Queue[str] = Queue()
 
         self._build_ui()
 
@@ -357,7 +358,7 @@ class App(ctk.CTk):
         self.summary_var.set("Running merge...")
         self._clear_debug_text()
         if self.debug_mode_var.get():
-            self._append_debug_line("Debug mode enabled. Live processing notes will appear here.")
+            self._append_debug_line("Debug mode enabled. Raw diagnostics will appear here.")
         else:
             self._set_debug_text("Debug mode is off.")
 
@@ -382,7 +383,9 @@ class App(ctk.CTk):
                 csv_path,
                 excel_path,
                 output_path,
-                log_callback=self._queue_log_line,
+                status_callback=self._queue_status_line,
+                debug_callback=self._queue_debug_line,
+                debug_mode=debug_mode,
                 save_log_file=save_log_file,
             )
         except Exception as exc:  # noqa: BLE001
@@ -391,18 +394,28 @@ class App(ctk.CTk):
 
         self.after(0, lambda: self._show_success(result))
 
-    def _queue_log_line(self, line: str) -> None:
-        self._log_queue.put(line)
+    def _queue_status_line(self, line: str) -> None:
+        self._status_queue.put(line)
+
+    def _queue_debug_line(self, line: str) -> None:
+        self._debug_queue.put(line)
 
     def _drain_log_queue(self) -> None:
         had_lines = False
         while True:
             try:
-                line = self._log_queue.get_nowait()
+                line = self._status_queue.get_nowait()
             except Empty:
                 break
             had_lines = True
             self.status_var.set(self._status_from_log_line(line))
+
+        while True:
+            try:
+                line = self._debug_queue.get_nowait()
+            except Empty:
+                break
+            had_lines = True
             if self.debug_mode_var.get():
                 self._append_debug_line(line)
 
@@ -454,7 +467,10 @@ class App(ctk.CTk):
         summary_lines = [
             f"Matched {result.matched_count} of {result.total_customer_sections} rows.",
             f"Unmatched rows: {unmatched_count}",
+            f"Processing mode: {result.processing_mode_used}",
         ]
+        if result.fallback_used:
+            summary_lines.append("Fallback used: sandbox switched to direct mode")
         if result.log_file_path:
             summary_lines.append(f"Log saved to: {result.log_file_path}")
         self.summary_var.set("\n".join(summary_lines))
@@ -463,7 +479,9 @@ class App(ctk.CTk):
             (
                 f"Done.\n\nOutput: {result.output_path}\n"
                 f"Matched rows: {result.matched_count}\n"
-                f"Unmatched rows: {unmatched_count}"
+                f"Unmatched rows: {unmatched_count}\n"
+                f"Processing mode: {result.processing_mode_used}"
+                + ("\nFallback used: Yes" if result.fallback_used else "")
                 + (f"\nLog file: {result.log_file_path}" if result.log_file_path else "")
             ),
         )
@@ -477,16 +495,25 @@ class App(ctk.CTk):
         messagebox.showerror(APP_TITLE, message)
 
 
-def run_cli(csv_path: str, excel_path: str, output_path: str | None) -> int:
+def run_cli(
+    csv_path: str,
+    excel_path: str,
+    output_path: str | None,
+    processing_mode: str,
+) -> int:
     result = merge_customer_notes(
         csv_path,
         excel_path,
         output_path or str(default_output_path(Path(csv_path))),
+        debug_mode=False,
         save_log_file=False,
+        processing_mode=processing_mode,
     )
     print(f"Created: {result.output_path}")
     print(f"Matched rows: {result.matched_count}")
     print(f"Unmatched rows: {len(result.unmatched_customers)}")
+    print(f"Processing mode: {result.processing_mode_used}")
+    print(f"Fallback used: {result.fallback_used}")
     return 0
 
 
@@ -496,6 +523,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--csv")
     parser.add_argument("--excel")
     parser.add_argument("--output")
+    parser.add_argument("--processing-mode", choices=["auto", "sandbox", "direct"], default="auto")
     return parser.parse_args(argv)
 
 
@@ -504,7 +532,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.cli:
         if not args.csv or not args.excel:
             raise SystemExit("CLI mode requires --csv and --excel.")
-        return run_cli(args.csv, args.excel, args.output)
+        return run_cli(args.csv, args.excel, args.output, args.processing_mode)
 
     app = App()
     app.mainloop()
